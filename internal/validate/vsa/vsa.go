@@ -48,9 +48,7 @@ type Predicate struct {
 }
 
 // Generator handles VSA predicate generation
-type Generator struct {
-	Report applicationsnapshot.Report
-}
+type Generator struct{}
 
 // NewGenerator creates a new VSA predicate generator
 func NewGenerator() *Generator {
