@@ -1,0 +1,37 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Automated PRs
+on:
+  schedule:
+    - cron: '0 0,8,16 * * *' # every day at 00:00, 08:00, 16:00 UTC
+  workflow_dispatch:
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make a random change
+        run: |
+          files=(README.md Makefile main.go go.mod dummy.txt)
+          file=${files[$RANDOM % ${#files[@]}]}
+          echo "Automated change at $(date)" >> $file
+          echo "Changed $file"
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Automated change at $(date)"
+          title: "Automated PR $(date)"
+          body: "Testing Sealights plugin"
+          branch: "auto-pr-$(date +%s)" 
