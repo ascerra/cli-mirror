@@ -34,4 +34,8 @@ jobs:
           commit-message: "Automated change at $(date)"
           title: "Automated PR $(date)"
           body: "Testing Sealights plugin"
-          branch: "auto-pr-$(date +%s)" 
+          branch: "auto-pr-$(date +%s)"
+
+permissions:
+  contents: write
+  pull-requests: write 
