@@ -38,6 +38,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ secrets.PAT_FOR_PR }}
           commit-message: "Automated change at $(date)"
           title: "Automated PR $(date)"
           body: "Testing Sealights plugin"
