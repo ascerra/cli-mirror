@@ -214,6 +214,74 @@ jobs:
           
           ./slcli test start-stage --bsid=$BSID --testStage "Acceptance Tests"
 
+      - name: Verify KIND cluster readiness
+        run: |
+          echo "Verifying KIND cluster is ready for acceptance tests..."
+          
+          # Wait a bit for any cluster operations to complete
+          sleep 10
+          
+          # Check if KIND clusters exist and are ready
+          echo "=== KIND Cluster Status ==="
+          kind get clusters || echo "No KIND clusters found"
+          kind get nodes || echo "No KIND nodes found"
+          
+          # Check if kubectl can connect to the cluster
+          if kind get clusters | grep -q .; then
+            echo "=== Testing kubectl connectivity ==="
+            kubectl cluster-info || echo "kubectl cluster-info failed"
+            kubectl get nodes || echo "kubectl get nodes failed"
+            kubectl get pods --all-namespaces || echo "kubectl get pods failed"
+          else
+            echo "No KIND clusters found - this might be expected for stub tests"
+          fi
+          
+          # Check system resources
+          echo "=== System Resources Before Tests ==="
+          free -h
+          df -h
+
+      - name: Verify Sealights configuration
+        run: |
+          echo "Verifying Sealights configuration..."
+          
+          # Check if Sealights files exist
+          echo "=== Sealights Files ==="
+          ls -la sltoken.txt buildSessionId.txt || echo "Sealights files not found"
+          
+          # Check Sealights agent status
+          echo "=== Sealights Agent Status ==="
+          ./slcli config list || echo "Sealights config list failed"
+          
+          # Check if the BSID is properly set
+          echo "=== Build Session ID ==="
+          cat buildSessionId.txt || echo "Build session ID file not found"
+          
+          # Verify Go environment
+          echo "=== Go Environment ==="
+          go version
+          go env | grep -E "(GOOS|GOARCH|CGO)" || echo "Go environment check failed"
+
+      - name: Run simple acceptance test
+        run: |
+          echo "Running a simple acceptance test to verify basic setup..."
+          
+          # Set up environment for Sealights
+          export SEALIGHTS_LOG_LEVEL=none
+          export SEALIGHTS_CONNECTION_TIMEOUT=120s
+          
+          # Try to run a simple test first - use a basic test that doesn't require complex setup
+          cd acceptance
+          echo "=== Testing basic Go test execution ==="
+          go test -v -run TestFeatures/version -timeout 5m ./... || {
+            echo "Simple acceptance test failed"
+            echo "=== Go test output ==="
+            echo "This will help identify if the issue is with Go tests or Sealights integration"
+            exit 1
+          }
+          
+          echo "Simple acceptance test passed - basic setup is working"
+
       - name: Acceptance test with enhanced debugging
         run: |
           echo "Starting acceptance tests with Sealights integration..."
@@ -224,13 +292,35 @@ jobs:
           export KIND_CLUSTER_TIMEOUT=600s
           export KIND_CLUSTER_WAIT=300s
           
+          # Additional environment variables for Sealights stability
+          export SEALIGHTS_AGENT_TOKEN_FILE="${GITHUB_WORKSPACE}/sltoken.txt"
+          export SEALIGHTS_BSID_FILE="${GITHUB_WORKSPACE}/buildSessionId.txt"
+          
+          # Ensure Go test environment is clean
+          export CGO_ENABLED=0
+          export GOOS=linux
+          export GOARCH=amd64
+          
           echo "Current environment variables:"
           env | grep -E "(SEALIGHTS|KIND|PODMAN)" || true
           
           # Run acceptance tests with increased timeout and better error handling
-          timeout 40m make acceptance-sealights || {
+          echo "=== Starting Acceptance Tests ==="
+          
+          # Check Sealights agent before running tests
+          echo "=== Sealights Agent Pre-Test Check ==="
+          ./slcli config list || echo "Sealights config list failed"
+          cat buildSessionId.txt || echo "Build session ID not found"
+          
+          timeout 40m make acceptance-sealights 2>&1 | tee acceptance-test.log || {
             echo "Acceptance tests failed or timed out. Running debug script..."
+            
+            # Show the last part of the test log for debugging
+            echo "=== Last 100 lines of acceptance test log ==="
+            tail -100 acceptance-test.log || echo "No test log available"
+            
             # Run comprehensive debug script
+            echo "=== Running Debug Script ==="
             "${GITHUB_WORKSPACE}/hack/debug-kind-cluster.sh" || echo "Debug script failed"
             
             # Additional debugging for KIND cluster
@@ -246,6 +336,19 @@ jobs:
             echo "=== Resource Debugging ==="
             free -h
             df -h
+            
+            # Check for any test artifacts or logs
+            echo "=== Test Artifacts ==="
+            find . -name "*.log" -o -name "junit*.xml" -o -name "coverage*.out" | head -10 || echo "No test artifacts found"
+            
+            # Check Go test environment
+            echo "=== Go Test Environment ==="
+            go version
+            go env | grep -E "(GOOS|GOARCH|CGO|GOPATH|GOROOT)" || echo "Go environment check failed"
+            
+            # Check if there are any Go test processes still running
+            echo "=== Go Test Processes ==="
+            ps aux | grep -E "(go|test)" | grep -v grep || echo "No Go test processes found"
             
             # Exit with failure
             exit 1
