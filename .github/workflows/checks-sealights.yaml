@@ -156,10 +156,16 @@ jobs:
   Acceptance:
     runs-on: ubuntu-latest
     needs: [Initialize, Test]
+    timeout-minutes: 45
     env:
       BSID: ${{ needs.Initialize.outputs.bsid }}
       SEALIGHTS_LOG_LEVEL: none
       SEALIGHTS_CONNECTION_TIMEOUT: 120s
+      # Add environment variables to help with KIND cluster stability
+      KIND_CLUSTER_TIMEOUT: 600s
+      KIND_CLUSTER_WAIT: 300s
+      # Increase system limits for better stability
+      KIND_CLUSTER_EXTRA_ARGS: "--wait=300s --timeout=600s"
     steps:
       - name: Restore workspace
         uses: actions/cache@v4
@@ -170,11 +176,80 @@ jobs:
       - name: Update podman
         run: |
           "${GITHUB_WORKSPACE}/hack/ubuntu-podman-update.sh"
-      - name: Create a test session
-        run: ./slcli test start-stage --bsid=$BSID --testStage "Acceptance Tests"
 
-      - name: Acceptance test
-        run: make acceptance-sealights
+      - name: Setup system resources for KIND cluster
+        run: |
+          echo "Setting up system resources for KIND cluster stability..."
+          
+          # Run initial debug to see system state
+          echo "=== Initial System State ==="
+          "${GITHUB_WORKSPACE}/hack/debug-kind-cluster.sh" || echo "Initial debug failed"
+          
+          # Increase inotify limits
+          echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
+          echo kernel.keys.maxkeys=1000 | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
+          
+          # Stop any existing podman services that might interfere
+          sudo systemctl stop podman.socket podman.service || true
+          sudo systemctl disable podman.socket podman.service || true
+          
+          # Clean up any existing KIND clusters that might be stuck
+          kind delete cluster --all || echo "No existing clusters to delete"
+          
+          # Ensure KIND is available and working
+          kind version || echo "KIND not available"
+          
+          # Check system resources after setup
+          echo "=== System State After Setup ==="
+          free -h
+          df -h
+
+      - name: Create a test session
+        run: |
+          echo "Creating Sealights test session..."
+          # Temporarily disable Sealights logging during cluster startup
+          export SEALIGHTS_LOG_LEVEL=none
+          export SEALIGHTS_CONNECTION_TIMEOUT=120s
+          
+          ./slcli test start-stage --bsid=$BSID --testStage "Acceptance Tests"
+
+      - name: Acceptance test with enhanced debugging
+        run: |
+          echo "Starting acceptance tests with Sealights integration..."
+          
+          # Set up environment for stable KIND cluster operation
+          export SEALIGHTS_LOG_LEVEL=none
+          export SEALIGHTS_CONNECTION_TIMEOUT=120s
+          export KIND_CLUSTER_TIMEOUT=600s
+          export KIND_CLUSTER_WAIT=300s
+          
+          echo "Current environment variables:"
+          env | grep -E "(SEALIGHTS|KIND|PODMAN)" || true
+          
+          # Run acceptance tests with increased timeout and better error handling
+          timeout 40m make acceptance-sealights || {
+            echo "Acceptance tests failed or timed out. Running debug script..."
+            # Run comprehensive debug script
+            "${GITHUB_WORKSPACE}/hack/debug-kind-cluster.sh" || echo "Debug script failed"
+            
+            # Additional debugging for KIND cluster
+            echo "=== Additional KIND Debugging ==="
+            kind get clusters || echo "No KIND clusters found"
+            kind get nodes || echo "No KIND nodes found"
+            
+            # Check for any stuck processes
+            echo "=== Process Debugging ==="
+            ps aux | grep -E "(kind|podman|docker)" || echo "No container processes found"
+            
+            # Check system resources
+            echo "=== Resource Debugging ==="
+            free -h
+            df -h
+            
+            # Exit with failure
+            exit 1
+          }
 
       - name: Upload test results, end test session
         if: success() || failure()
