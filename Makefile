@@ -109,6 +109,7 @@ test: ## Run all unit tests
 # to 30s to accommodate many samples being generated and test cases being run.
 	@echo "Generative tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-generative.out -timeout 30s -tags=generative ./... | $(TEST_OUTPUT_FILTER)
+SEALIGHTS_ACCEPTANCE_TIMEOUT:=40m
 
 ACCEPTANCE_TIMEOUT:=20m
 SEALIGHTS_ACCEPTANCE_TIMEOUT:=40m
