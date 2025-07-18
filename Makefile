@@ -109,6 +109,7 @@ test: ## Run all unit tests
 # to 30s to accommodate many samples being generated and test cases being run.
 	@echo "Generative tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-generative.out -timeout 30s -tags=generative ./... | $(TEST_OUTPUT_FILTER)
+SEALIGHTS_ACCEPTANCE_TIMEOUT:=40m
 
 ACCEPTANCE_TIMEOUT:=20m
 .ONESHELL:
@@ -141,7 +142,7 @@ acceptance-sealights: ## Run all acceptance tests with sealights integration
 	$(MAKE) build && \
 	export COVERAGE_FILEPATH="$$ACCEPTANCE_WORKDIR"; \
 	export COVERAGE_FILENAME="-acceptance"; \
-	cd acceptance && SEALIGHTS_LOG_LEVEL=none go run -modfile "$$ACCEPTANCE_WORKDIR/tools/go.mod" gotest.tools/gotestsum --junitfile "$(ROOT_DIR)/junit-acceptance.xml" -- -parallel 1 -timeout $(ACCEPTANCE_TIMEOUT) ./...
+	cd acceptance && SEALIGHTS_LOG_LEVEL=none go run -modfile "$$ACCEPTANCE_WORKDIR/tools/go.mod" gotest.tools/gotestsum --junitfile "$(ROOT_DIR)/junit-acceptance.xml" -- -parallel 2 -timeout $(SEALIGHTS_ACCEPTANCE_TIMEOUT) ./...
 
 # Add @focus above the feature you're hacking on to use this
 # (Mainly for use with the feature-% target below)
