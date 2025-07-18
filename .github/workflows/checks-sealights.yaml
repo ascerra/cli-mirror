@@ -156,7 +156,6 @@ jobs:
   Acceptance:
     runs-on: ubuntu-latest
     needs: [Initialize, Test]
-    timeout-minutes: 60
     env:
       BSID: ${{ needs.Initialize.outputs.bsid }}
       SEALIGHTS_LOG_LEVEL: none
