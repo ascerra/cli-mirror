@@ -261,6 +261,12 @@ jobs:
           echo "=== Go Environment ==="
           go version
           go env | grep -E "(GOOS|GOARCH|CGO)" || echo "Go environment check failed"
+          
+          # Verify gotestsum is available
+          echo "=== Gotestsum Verification ==="
+          cd acceptance
+          go run -modfile "../tools/go.mod" gotest.tools/gotestsum --version || echo "Gotestsum not available"
+          cd ..
 
       - name: Run simple acceptance test
         run: |
@@ -281,6 +287,19 @@ jobs:
           }
           
           echo "Simple acceptance test passed - basic setup is working"
+
+      - name: Test acceptance without Sealights
+        run: |
+          echo "Testing acceptance tests without Sealights integration..."
+          
+          # Run the regular acceptance target (without Sealights)
+          timeout 20m make acceptance || {
+            echo "Regular acceptance tests failed"
+            echo "This indicates the issue is with the tests themselves, not Sealights"
+            exit 1
+          }
+          
+          echo "Regular acceptance tests passed"
 
       - name: Acceptance test with enhanced debugging
         run: |
@@ -312,8 +331,29 @@ jobs:
           ./slcli config list || echo "Sealights config list failed"
           cat buildSessionId.txt || echo "Build session ID not found"
           
-          timeout 40m make acceptance-sealights 2>&1 | tee acceptance-test.log || {
-            echo "Acceptance tests failed or timed out. Running debug script..."
+          # Check if Sealights agent is interfering with Go tests
+          echo "=== Checking for Sealights Agent Interference ==="
+          ps aux | grep -E "(slgoagent|slcli)" | grep -v grep || echo "No Sealights processes found"
+          
+          # Check environment variables that might affect Go tests
+          echo "=== Environment Variables Check ==="
+          env | grep -E "(SEALIGHTS|GO|GOROOT|GOPATH)" || echo "No relevant environment variables found"
+          
+          # Run acceptance tests with proper error handling
+          echo "=== Starting Acceptance Tests with Sealights ==="
+          echo "Command: make acceptance-sealights"
+          
+          set +e  # Don't exit on error immediately
+          timeout 40m make acceptance-sealights 2>&1 | tee acceptance-test.log
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          set -e  # Re-enable exit on error
+          
+          echo "=== Test Execution Completed ==="
+          echo "Exit code: $TEST_EXIT_CODE"
+          echo "Test log size: $(wc -l < acceptance-test.log) lines"
+          
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "Acceptance tests failed with exit code $TEST_EXIT_CODE"
             
             # Show the last part of the test log for debugging
             echo "=== Last 100 lines of acceptance test log ==="
@@ -350,9 +390,23 @@ jobs:
             echo "=== Go Test Processes ==="
             ps aux | grep -E "(go|test)" | grep -v grep || echo "No Go test processes found"
             
-            # Exit with failure
-            exit 1
-          }
+            # Exit with the original test failure code
+            exit $TEST_EXIT_CODE
+          else
+            echo "Acceptance tests completed successfully"
+            
+            # Verify test artifacts were generated
+            echo "=== Verifying Test Artifacts ==="
+            if [ -f "junit-acceptance.xml" ]; then
+              echo "JUnit XML file generated successfully"
+              echo "File size: $(wc -l < junit-acceptance.xml) lines"
+              echo "First few lines:"
+              head -10 junit-acceptance.xml || echo "Cannot read junit file"
+            else
+              echo "WARNING: junit-acceptance.xml not found"
+              echo "This may indicate the tests didn't run properly with gotestsum"
+            fi
+          fi
 
       - name: Upload test results, end test session
         if: success() || failure()
