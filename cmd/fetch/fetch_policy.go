@@ -41,7 +41,7 @@ func fetchPolicyCmd() *cobra.Command {
 
 		Long: hd.Doc(`
 			Fetch policy rules (rego files) from a git repository or other source.
-
+			Note: This command is not typically required to evaluate policies.
 			Each policy source will be downloaded into a separate unique directory inside
 			the "policy" directory under the destination directory specified. The
 			destination directory is either an automatically generated temporary work dir
