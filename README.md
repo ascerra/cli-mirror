@@ -121,3 +121,4 @@ This issue arises because the acceptance tests use ec binaries built with `CGO_E
 [pol]: https://github.com/conforma/policy/
 [docs]: https://conforma.dev/docs/cli/ec.html
 Automated change at Tue Jul 15 16:31:33 UTC 2025
+Automated change at Mon Aug  4 02:21:12 UTC 2025
