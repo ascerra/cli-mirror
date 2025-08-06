@@ -21,3 +21,4 @@ import "github.com/conforma/cli/cmd"
 func main() {
 	cmd.Execute()
 }
+Automated change at Wed Aug  6 16:33:10 UTC 2025
